@@ -1,87 +1,170 @@
-# Mnemos Ark 路 璁板繂鏂硅垷
+# Mnemos Ark · 记忆方舟
 
 **Status-first structured memory & precision task routing for AI agents.**
 
-> 璁板繂鏄帇鑸辩墿锛岃矾鐢辨槸缃楃洏銆?> Memory is the ballast; routing is the compass.
+> 记忆是压舱物，路由是罗盘。
+> Memory is the ballast; routing is the compass.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-32%20passed-brightgreen.svg)](#tests)
+[![Tests](https://img.shields.io/badge/tests-46%20passed-brightgreen.svg)](#tests)
 
-缁?AI Agent 鐨?*缁撴瀯鍖栭暱鏈熻蹇?+ 绮惧噯浠诲姟璺敱**寮曟搸銆備笁绫昏蹇嗭紙鍐崇瓥鍙?/ 閿欓鏈?/ 宸ョ▼鐜扮姸锛変簰绱㈠紩锛宖resh session 浠?status 鍑哄彂锛屽叾浣欐寜缂栧彿绮惧噯璺宠浆鈥斺€?*涓嶆暣搴撶亴涓婁笅鏂囷紝鐪?token锛屾洿绮惧噯**銆傞浂閲嶅瀷渚濊禆锛圥ython stdlib only锛夈€?
+给 AI Agent 的**结构化长期记忆 + 精准任务路由**引擎。三类记忆（决策史 / 错题本 / 工程现状）互索引，fresh session 从 status 出发，其余按编号精准跳转——**不整库灌上下文，省 token，更精准**。零重型依赖（Python stdlib only）。
+
 ---
 
-## 涓轰粈涔堜笉鏄?鍚戦噺搴?+ RAG"锛?
-涓変釜琚櫘閬嶅拷瑙嗙殑闂锛?
-1. **涓婁笅鏂囨薄鏌?* 鈥斺€?鍚屼竴椤圭洰閲岃亰鍒殑浜嬶紝闂茶亰娣疯繘椤圭洰涓婁笅鏂囷紝妫€绱㈣绋€閲?2. **token 缁忔祹** 鈥斺€?姣忔鎶婇暱鏂囨湰鏁翠綋娉ㄥ叆鏄?O(鍏ㄦ枃)锛涜蹇嗕竴澶氬氨瑁呬笉涓?3. **娉ㄦ剰鍔?U 褰㈡洸绾?*锛坙ost-in-the-middle, [arXiv:2307.03172](https://arxiv.org/abs/2307.03172)锛夆€斺€?闀夸笂涓嬫枃閲屾ā鍨嬪棣栧熬娉ㄦ剰鍔涙渶寮恒€佷腑娈垫渶寮憋紝鎶婇暱鏂囩亴涓鏄渶宸殑娉ㄥ叆绛栫暐
+## 为什么不是"向量库 + RAG"？
 
-Mnemos Ark 鐨勭瓟妗堟槸**鍥涗欢浜?*锛?
-| 鏈哄埗 | 鍋氭硶 |
+三个被普遍忽视的问题：
+
+1. **上下文污染** —— 同一项目里聊别的事，闲聊混进项目上下文，检索被稀释
+2. **token 经济** —— 每次把长文本整体注入是 O(全文)；记忆一多就装不下
+3. **注意力 U 形曲线**（lost-in-the-middle, [arXiv:2307.03172](https://arxiv.org/abs/2307.03172)）—— 长上下文里模型对首尾注意力最强、中段最弱，把长文灌中段是最差的注入策略
+
+Mnemos Ark 的答案是**四件事**：
+
+| 机制 | 做法 |
 |---|---|
-| **涓夊簱缁撴瀯鍖?* | `DEC` 鍐崇瓥鍙诧紙闀匡級路 `LES` 閿欓鏈紙涓級路 `STA` 宸ョ▼鐜扮姸锛堢煭锛夛紝甯︾疆淇″害銆佽瘉浼Е鍙戝櫒銆佺敓鍛藉懆鏈?|
-| **绫诲瀷鍖栦簰绱㈠紩** | `caused / fixes / supersedes / refutes / derived_from 鈥 鍏杈癸紝鍙屽悜鍙煡鈥斺€旀瘮绾悜閲忓鍥犳灉锛屾瘮鍏ㄩ噺鍥捐氨杞诲緱澶?|
-| **status-first 鍐峰惎鍔?* | `bootstrap()` 鍙粰銆屽綋鍓嶇幇鐘跺叏鏂?+ 涓€鐜寚閽?+ 浜岀幆缂栧彿銆嶏紝鍏朵綑 `jump("DEC-0042")` 鍗曟潯鍙栧洖 |
-| **U 褰㈣绠?* | 澶氭潯鍚堝苟鏃堕灏炬斁鍏ㄦ枃銆佷腑娈靛彧鐣欐寚閽堬紝棰勭畻鎸夈€岄鈫掑熬鈫掍腑娈点€嶅垎閰?|
+| **三库结构化** | `DEC` 决策史（长）· `LES` 错题本（中）· `STA` 工程现状（短），带置信度、证伪触发器、生命周期 |
+| **类型化互索引** | `caused / fixes / supersedes / refutes / derived_from …` 八种边，双向可查——比纯向量多因果，比全量图谱轻得多 |
+| **status-first 冷启动** | `bootstrap()` 只给「当前现状全文 + 一环指针 + 二环编号」，其余 `jump("DEC-0042")` 单条取回 |
+| **U 形装箱** | 多条合并时首尾放全文、中段只留指针，预算按「首→尾→中段」分配 |
 
-## 涓€鍒嗛挓涓婃墜
+## 一分钟上手
+
+### 三库与 status-first
 
 ```python
 from mnemos_ark import DLSMemory
 
-mem = DLSMemory()                      # 榛樿 ~/.laap/dls锛屽彲鐢?home= 鑷畾涔?
-# 鍐欙細涓夌被缁撴瀯鍖栬蹇?mem.add_status("web 椤圭洰鐜扮姸", "鍗曞啓鍏ラ潰宸叉敹鏁?,
-               next_steps=["鎺ュ叆璺敱"], open_questions=["澶氭ā鎬佹€庝箞鍔?],
+mem = DLSMemory()                      # 默认 ~/.laap/dls，可用 home= 自定义
+
+# 写：三类结构化记忆
+mem.add_status("web 项目现状", "单写入面已收敛",
+               next_steps=["接入路由"], open_questions=["多模态怎么办"],
                project="web")
-dec = mem.add_decision("浼氳瘽搴撻€?SQLite",
-                       context="4 濂楀疄鐜版墦鏋?, chosen="鍗曞啓鍏ラ潰",
-                       rationale="缁熶竴鎵撲綔鐢ㄥ煙鏍囩鐨勫墠鎻?,
-                       options_considered=["缁х画骞惰", "鍏ㄩ噸鍐?, "鏀舵暃"])
-les = mem.add_lesson("FTS5 涓枃闄烽槺",
-                     mistake="杩炵画涓枃琚储寮曟垚鍗?token",
-                     correction="涓枃鏌ヨ璧?LIKE",
-                     rule_of_thumb="CJK 涓嶈繘 FTS")
+dec = mem.add_decision("会话库选 SQLite",
+                       context="4 套实现打架", chosen="单写入面",
+                       rationale="统一打作用域标签的前提",
+                       options_considered=["继续并行", "全重写", "收敛"])
+les = mem.add_lesson("FTS5 中文陷阱",
+                     mistake="连续中文被索引成单 token",
+                     correction="中文查询走 LIKE",
+                     rule_of_thumb="CJK 不进 FTS")
 mem.link(dec.id, les.id, "caused")
 
-# 璇伙細fresh session 浠?status 鍑哄彂
+# 读：fresh session 从 status 出发
 boot = mem.bootstrap("web", budget_tokens=1200)
-print(boot["status"])                  # 鐜扮姸鍏ㄦ枃
-print(boot["ring1"])                   # 涓€鐜寚閽堬紙id + 涓€鍙ヨ瘽锛?
-# 鍏朵綑鎸夌紪鍙风簿鍑嗚烦杞紝涓嶆暣搴撴敞鍏?print(mem.jump(dec.id))
-print(mem.neighbors(dec.id))           # 闇€瑕佸睍寮€鎵嶇湅涓嬩竴璺?
-# 闃叉薄鏌擄細闂茶亰鏍规湰涓嶄細璺敱杩涢」鐩《
-assert mem.infer_project("浠婂ぉ濂界疮鍟?) == "_global"
-assert mem.infer_project("SQLite 涓轰粈涔堥€夎繖涓?) == "web"
+print(boot["status"])                  # 现状全文
+print(boot["ring1"])                   # 一环指针（id + 一句话）
+
+# 其余按编号精准跳转，不整库注入
+print(mem.jump(dec.id))
+print(mem.neighbors(dec.id))           # 需要展开才看下一跳
+
+# 防污染：闲聊根本不会路由进项目桶
+assert mem.infer_project("今天好累啊") == "_global"
+assert mem.infer_project("SQLite 为什么选这个") == "web"
 ```
 
-## 鏋舵瀯
+## 架构
+
+![Mnemos Ark architecture](assets/architecture.svg)
 
 ```
-鍐欏叆闈紙鍞竴鍏ュ彛锛屽彲鎸傞獙璇侀挬瀛愶級
-   鈹? add_decision / add_lesson / add_status
-   鈻?鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹? SQLite 鍗曞啓鍏ラ潰          Markdown 闀滃儚       鈹?鈹? records + links + FTS5   md/{project}/*.md  鈹?鈹? 锛堝彲妫€绱級               锛堜汉鍙/鍙増鏈帶鍒讹級鈹?鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?               鈹?   鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹尖攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?   鈻?          鈻?             鈻?               鈻?infer_project  bootstrap    jump/get        pack_context
-浣滅敤鍩熻矾鐢?    status 鍏ㄦ枃   O(1) 鍗曟潯       U 褰㈣绠?闂茶亰鈫抇global   +闄愰噺鎸囬拡     绮惧噯璺宠浆        棣栧熬鍏ㄦ枃涓鎸囬拡
+写入面（唯一入口，可挂验证钩子）
+   │  add_decision / add_lesson / add_status
+   ▼
+┌─────────────────────────────────────────────┐
+│  SQLite 单写入面          Markdown 镜像       │
+│  records + links + FTS5   md/{project}/*.md  │
+│  （可检索）               （人可读/可版本控制）│
+└──────────────┬──────────────────────────────┘
+               │
+   ┌───────────┼──────────────┬────────────────┐
+   ▼           ▼              ▼                ▼
+infer_project  bootstrap    jump/get        pack_context
+作用域路由     status 全文   O(1) 单条       U 形装箱
+闲聊→_global   +限量指针     精准跳转        首尾全文中段指针
 ```
 
-**璁板繂鍗虫枃浠?*锛氭瘡鏉¤蹇嗘棦鏄?SQLite 琛岋紙鍙绱級鍙堟槸 Markdown 鏂囦欢锛坒rontmatter 鍏ㄥ瓧娈靛寲锛夆€斺€斿彲瀹¤銆佸彲杩佺Щ銆佸け鍘昏繍琛屾椂浠嶅彲璇汇€?
-**澶辨晥鑰岄潪鍒犻櫎**锛堝€熼壌 [Graphiti](https://github.com/getzep/graphiti)锛夛細鍐崇瓥鍙 `superseded` 鎺ㄧ炕浣嗕笉瑕嗙洊锛屾函婧愪笉鏂€?
-## 浠诲姟璺敱鍣?
-`TaskRouter` 鎶娿€屾嬁鍒颁换鍔♀啋绮惧噯瀹氫綅鈫掔簿鍑嗚В鍐炽€嶇紪鐮佷负鍙墽琛屽绾︼細
+**记忆即文件**：每条记忆既是 SQLite 行（可检索）又是 Markdown 文件（frontmatter 全字段化）——可审计、可迁移、失去运行时仍可读。
+
+**失效而非删除**（借鉴 [Graphiti](https://github.com/getzep/graphiti)）：决策可被 `superseded` 推翻但不覆盖，溯源不断。
+
+## 任务路由器
+
+`TaskRouter` 把「拿到任务→精准定位→精准解决」编码为可执行契约：
 
 ```python
 from mnemos_ark import TaskRouter
 
-route = TaskRouter().route("鎶婅繖涓惤鍦伴〉鏀逛竴涓嬪苟淇绉诲姩绔姤閿?)
+route = TaskRouter().route("把这个落地页改一下并修复移动端报错")
 print(route.primary_type)        # frontend / debug / ...
-print(route.route["skills"])     # 璇ョ敤鍝簺 skill锛圲I 寮哄埗璧拌璁′笁浠跺锛?print(route.plan)                # 瀹氫綅 鈫?鎵ц 鈫?娌夋穩
-print(route.verification)        # 瀹珷妫€鏌?+ 楠屾敹 oracle + 娴嬭瘯娓呭崟
-print(route.memory)              # 鍥炲啓鍝被璁板繂銆佸摢涓」鐩煙
+print(route.route["skills"])     # 该用哪些 skill（UI 强制走设计三件套）
+print(route.plan)                # 定位 → 执行 → 沉淀
+print(route.verification)        # 宪章检查 + 验收 oracle + 测试清单
+print(route.memory)              # 回写哪类记忆、哪个项目域
 ```
 
-- **鍒嗙被鍣?*锛氳鍒欐墦鍒嗭紙鍓嶇/鍚庣/璋冭瘯/鏁版嵁/璋冪爺/鍐呭/閮ㄧ讲/濯掍綋锛夛紝澶氱被鍨嬫贩鍚堝彲瑙?- **璧勬簮璺敱琛?*锛氭瘡绫讳换鍔＄殑 skills / MCP 宸ュ叿 / 瀛愪唬鐞?/ 楠屾敹娓呭崟
-- **瑙ｆ瀽鍣ㄥ彲鎻掓嫈**锛氳涔?skill 璺敱銆佷唬鐮佸浘璋便€佽蹇嗗煙鎺ㄦ柇鈥斺€旂己澶辨垨澶辫触鍦?`degraded` 瀛楁**鏄惧紡璁板綍锛屼笉闈欓粯**
+- **分类器**：规则打分（前端/后端/调试/数据/调研/内容/部署/媒体），多类型混合可见
+- **资源路由表**：每类任务的 skills / MCP 工具 / 子代理 / 验收清单
+- **解析器可插拔**：语义 skill 路由、代码图谱、记忆域推断——缺失或失败在 `degraded` 字段**显式记录，不静默**
 
-## MCP 宸ュ叿闈?
-13 涓伐鍏峰彲鐩存帴娉ㄥ唽杩涗换鎰?FastMCP 鏈嶅姟鍣細
+## 可插拔向量层（语义检索挂载点）
+
+引擎零重型依赖，向量能力按需挂载：
+
+```python
+from mnemos_ark import DLSMemory
+from mnemos_ark.embeddings import HashingEmbedder, OpenAICompatEmbedder, CallableEmbedder
+
+mem = DLSMemory(embedder=HashingEmbedder(dim=256))   # 零依赖确定性嵌入（离线/测试）
+# mem = DLSMemory(embedder=OpenAICompatEmbedder("http://localhost:11434/v1", model="nomic-embed"))
+# mem = DLSMemory(embedder=CallableEmbedder(lambda ts: model.encode(ts)))
+
+mem.semantic_search("connection pool sizing")   # 余弦语义检索
+mem.hybrid_search("连接池选型")                 # 词法+语义 RRF 融合
+mem.rebuild_embeddings()                        # 换 embedder 后重建索引
+```
+
+未挂载 embedder 时，`hybrid_search` 自动降级词法并**记录降级事件**（不静默）；
+`semantic_search` 则显式报错——检索精度的问题宁可暴露，不猜。
+
+## 睡眠蒸馏的 LLM Provider 适配器
+
+```python
+from mnemos_ark.llm import OpenAICompatProvider, CallableProvider
+
+provider = OpenAICompatProvider("https://api.deepseek.com/v1", api_key="...", model="deepseek-chat")
+# 任意实现 complete(prompt)-> str 的对象都行（包括 Ollama / MiMo / 本地模型）
+
+mem.distill_day("今天收敛了写入面，还修了 FTS5 中文分词陷阱…",
+                project="web", provider=provider)
+# → LLM 产出事件数组 → parse_event_array（容错围栏不容错语义）→ DEC/LES 入库
+```
+
+分层铁律：引擎不绑定任何 LLM SDK，只认 `complete(prompt) -> str` 三行协议；
+provider 缺失或输出解析失败都**显式报错**——蒸馏是写入路径，不猜。
+
+## LongMemEval-V2 基准接入
+
+```bash
+python scripts/run_longmemeval.py --dataset longmemeval.jsonl --strategy hybrid --k 5
+```
+
+产出 hit@k / MRR / token 经济（对照全量注入）/ 分题型命中表。
+数据集：[LongMemEval-V2](https://xiaowu0162.github.io/longmemeval-v2/)；仓库自带
+`tests/fixtures/longmemeval_sample.jsonl` 可先跑通全流程。
+
+**诚实的近似声明**（写在 `benchmark.py` 模块头）：haystack 会话原文入库代替
+蒸馏后的 DEC/LES（被测的检索层与生产一致，入库形态更粗）；证据判定优先用
+数据集标注，缺失时用答案子串启发式；本基准只评记忆管线命中与 token 经济，
+不评 LLM 答题准确率。
+
+## MCP 工具面
+
+13 个工具可直接注册进任意 FastMCP 服务器：
 
 ```
 dls_add_record / dls_add_decision / dls_add_lesson / dls_add_status
@@ -98,34 +181,45 @@ register_dls_tools(mcp)          # 11 tools
 register_task_router_tools(mcp)  # 2 tools
 ```
 
-## Benchmark锛歴tatus-first + id 绾ц烦杞?
-姣忎細璇濆畾鐐规煡璇?3 娆★紙`scripts/eval_injection.py`锛屽彲澶嶇幇锛夛細
+## Benchmark：status-first + id 级跳转
 
-| 璇枡瑙勬ā | 鍏ㄩ噺娉ㄥ叆 tok/浼氳瘽 | 瑁呭緱杩?128k 绐楀彛锛?| status-first tok/浼氳瘽 | 鍗犳瘮 | 鐩爣绮惧噯鍏ヤ笂涓嬫枃 |
+每会话定点查询 3 次（`scripts/eval_injection.py`，可复现）：
+
+| 语料规模 | 全量注入 tok/会话 | 装得进 128k 窗口？ | status-first tok/会话 | 占比 | 目标精准入上下文 |
 |---|---|---|---|---|---|
-| 200 鏉?| 17,481 | 鏄?| 785 | 4.5% | 3/3 (100%) |
-| 2,000 鏉?| 184,473 | **鍚︼紙瓒?1.4脳锛?* | 808 | 0.4% | 3/3 (100%) |
-| 5,000 鏉?| 467,973 | **鍚︼紙瓒?3.6脳锛?* | 813 | 0.2% | 3/3 (100%) |
+| 200 条 | 17,481 | 是 | 785 | 4.5% | 3/3 (100%) |
+| 2,000 条 | 184,473 | **否（超 1.4×）** | 808 | 0.4% | 3/3 (100%) |
+| 5,000 条 | 467,973 | **否（超 3.6×）** | 813 | 0.2% | 3/3 (100%) |
 
-**璇氬疄杈圭晫**锛?- 鍏ㄥ簱缁艰堪鍨嬩换鍔★紙"鎬荤粨鎴戜滑鎵€鏈夊喅绛?锛夋湰鏈哄埗涓嶇洿鎺ユ敮鎸侊紝闇€鍙﹂厤妫€绱㈣仛鍚堬紱
-- token 涓哄惎鍙戝紡浼扮畻锛? token 鈮?2.5 瀛楃锛夛紱
-- jump 鐨?100% 鏄鍧€淇濊瘉锛涘叏閲忔敞鍏ョ殑瀹為檯鍙洖鍙椾腑娈佃“鍑忓奖鍝嶏紝鏈〃涓嶈櫄鏋勫叾鏁板瓧銆?
+**诚实边界**：
+- 全库综述型任务（"总结我们所有决策"）本机制不直接支持，需另配检索聚合；
+- token 为启发式估算（1 token ≈ 2.5 字符）；
+- jump 的 100% 是寻址保证；全量注入的实际召回受中段衰减影响，本表不虚构其数字。
+
 ## Tests
 
 ```bash
 pip install -e ".[dev]"
-pytest            # 32 tests: 鍐欏叆濂戠害 / 浜掔储寮?/ 鍐峰惎鍔?/ U 褰㈣绠?/
-                  # 浣滅敤鍩熼槻姹℃煋 / 钂搁 / 娉ㄥ唽闈?/ 璺敱濂戠害
+pytest            # 46 tests: 写入契约 / 互索引 / 冷启动 / U 形装箱 /
+                  # 作用域防污染 / 蒸馏 / 注册面 / 路由契约 /
+                  # 向量层 / LLM 适配器 / LongMemEval 基准
 ```
 
-## 璁捐鏂囨。
+## 设计文档
 
-瀹屾暣璁捐锛堝惈 2025-2026 璁烘枃涓庡紑婧愮敓鎬佽皟鐮旂煩闃碉細Mem0 / Zep-Graphiti / Letta / LangMem / Memobase / A-MEM / LongMemEval-V2锛夎 [docs/DESIGN.md](docs/DESIGN.md)銆?
-**涓氱晫涓変釜绌虹櫧锛屾湰椤圭洰鍚勫崰涓€涓?*锛氱粨鏋勫寲鍐崇瓥/閿欓鏈紙缃俊搴?璇佷吉鏉′欢+鐢熸晥鑼冨洿锛壜?id 绾ф寜闇€瀵诲潃鍗忚 路 杞婚噺绫诲瀷鍖栦簰绱㈠紩銆?
+完整设计（含 2025-2026 论文与开源生态调研矩阵：Mem0 / Zep-Graphiti / Letta / LangMem / Memobase / A-MEM / LongMemEval-V2）见 [docs/DESIGN.md](docs/DESIGN.md)。
+
+**业界三个空白，本项目各占一个**：结构化决策/错题本（置信度+证伪条件+生效范围）· id 级按需寻址协议 · 轻量类型化互索引。
+
 ## Roadmap
 
-- [x] 涓夊簱寮曟搸 + 浜掔储寮?+ status-first 鍐峰惎鍔?+ U 褰㈣绠?- [x] 浣滅敤鍩熻矾鐢憋紙闃蹭笂涓嬫枃姹℃煋锛?- [x] 浠诲姟璺敱鍣?+ MCP 宸ュ叿闈?- [ ] 璇箟妫€绱㈡寕杞界偣锛坄memory_ranker` 椋庢牸鐨勫彲鎻掓嫈鍚戦噺灞傦級
-- [ ] 鐫＄湢钂搁鐨?LLM provider 閫傞厤鍣?- [ ] LongMemEval-V2 鍩哄噯鎺ュ叆
+- [x] 三库引擎 + 互索引 + status-first 冷启动 + U 形装箱
+- [x] 作用域路由（防上下文污染）
+- [x] 任务路由器 + MCP 工具面
+- [x] 语义检索挂载点（EmbeddingProvider 可插拔向量层 + hybrid RRF）
+- [x] 睡眠蒸馏的 LLM provider 适配器（OpenAI 兼容 + 任意 callable）
+- [x] LongMemEval-V2 基准接入（hit@k / MRR / token 经济）
+- [ ] 浏览器/桌面端 Computer Use 联动（进行中）
 
 ## License
 
@@ -133,11 +227,14 @@ pytest            # 32 tests: 鍐欏叆濂戠害 / 浜掔储寮?/ 鍐峰惎鍔?/
 
 ---
 
-## 涓枃璇存槑
+## 中文说明
 
-Mnemos Ark锛堣蹇嗘柟鑸燂級鏄?LAAP 鏁板瓧鐢熷懡椤圭洰鐨勮蹇嗗簳搴у紑婧愮増銆傚畠鐨勬牳蹇冧富寮狅細
+Mnemos Ark（记忆方舟）是 LAAP 数字生命项目的记忆底座开源版。它的核心主张：
 
-**鍒嗘瀽鍙互璺ㄥ煙锛屾敞鎰忓姏涓嶈兘璺ㄥ煙銆?*
+**分析可以跨域，注意力不能跨域。**
 
-- 姣忔潯璁板繂鍐欏叆鏃剁‘瀹氫綔鐢ㄥ煙锛坄project`锛夛紝闂茶亰钀?`_global`鈥斺€斾笉鏄?妫€绱㈡椂杩囨护"锛岃€屾槸**鏍规湰涓嶄細璺敱杩涢」鐩《**锛?- fresh session 浠?`STA`锛堝伐绋嬬幇鐘讹紝鐭級鍑哄彂锛屾部浜掔储寮曟寜闇€灞曞紑锛屽叾浣欒蹇嗘寜缂栧彿 `jump` 绮惧噯鍙栧洖锛?- 鍐崇瓥鍙茶褰?褰撴椂涓轰粈涔堣繖涔堥€夈€佷粈涔堟潯浠朵笅閲嶆柊鑰冭檻"锛岄敊棰樻湰璁板綍"閿欏湪鍝€佸彛璇€鏄粈涔?鈥斺€旇繖涓ゆ牱鎭版伆鏄富娴?Agent 璁板繂绯荤粺缂哄け鐨勭粨鏋勩€?
-鐢?[Lorry Jovens](https://github.com/lorryjovens-hub) 涓?Aris锛圠AAP 鏁板瓧鐢熷懡锛夊叡鍚岃璁′笌瀹炵幇銆傛祴璇?32 椤瑰叏缁匡紝琛屼负 oracle 8/8 閫氳繃銆?
+- 每条记忆写入时确定作用域（`project`），闲聊落 `_global`——不是"检索时过滤"，而是**根本不会路由进项目桶**；
+- fresh session 从 `STA`（工程现状，短）出发，沿互索引按需展开，其余记忆按编号 `jump` 精准取回；
+- 决策史记录"当时为什么这么选、什么条件下重新考虑"，错题本记录"错在哪、口诀是什么"——这两样恰恰是主流 Agent 记忆系统缺失的结构。
+
+由 [Lorry Jovens](https://github.com/lorryjovens-hub) 与 Aris（LAAP 数字生命）共同设计与实现。测试 46 项全绿。

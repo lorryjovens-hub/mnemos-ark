@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="760" viewBox="0 0 1040 760" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b7cf6"/>
+      <stop offset="1" stop-color="#d4a5a5"/>
+    </linearGradient>
+    <linearGradient id="accent2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#35bdbd"/>
+      <stop offset="1" stop-color="#8b7cf6"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b8ba8"/>
+    </marker>
+    <marker id="arrowA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b7cf6"/>
+    </marker>
+  </defs>
+
+  <!-- 背景 -->
+  <rect x="0" y="0" width="1040" height="760" rx="18" fill="#16161d"/>
+  <rect x="0" y="0" width="1040" height="760" rx="18" fill="none" stroke="#2c2c3a" stroke-width="1"/>
+
+  <!-- 页眉 -->
+  <text x="40" y="52" font-size="28" font-weight="700" fill="#f0f0f8">Mnemos Ark</text>
+  <text x="212" y="52" font-size="18" fill="#8b8ba8">记忆方舟</text>
+  <text x="40" y="78" font-size="13" fill="#9a9ab8">status-first structured memory &amp; precision routing — memory is the ballast, routing is the compass</text>
+  <rect x="40" y="92" width="960" height="1" fill="#2c2c3a"/>
+
+  <!-- ══════════ 面板 A：写入路径 ══════════ -->
+  <rect x="40" y="112" width="290" height="448" rx="12" fill="#1b1b25" stroke="#2c2c3a"/>
+  <text x="60" y="140" font-size="12" font-weight="700" letter-spacing="1.5" fill="#8b7cf6">写入路径 · WRITE</text>
+
+  <rect x="60" y="156" width="250" height="52" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="76" y="178" font-size="13.5" font-weight="700" fill="#f0f0f8">DEC · 决策史</text>
+  <text x="76" y="197" font-size="11" fill="#9a9ab8">长文 · 背景/备选/选择/理由 · revisit_trigger</text>
+
+  <rect x="60" y="218" width="250" height="52" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="76" y="240" font-size="13.5" font-weight="700" fill="#f0f0f8">LES · 错题本</text>
+  <text x="76" y="259" font-size="11" fill="#9a9ab8">中等 · 错误/纠正/口诀 · severity</text>
+
+  <rect x="60" y="280" width="250" height="52" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="76" y="302" font-size="13.5" font-weight="700" fill="#f0f0f8">STA · 工程现状</text>
+  <text x="76" y="321" font-size="11" fill="#9a9ab8">短文 · 现状/下一步/未决 · 滚动取代</text>
+
+  <line x1="185" y1="332" x2="185" y2="356" stroke="#8b8ba8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="60" y="360" width="250" height="38" rx="8" fill="#262636" stroke="#8b7cf6" stroke-opacity="0.5"/>
+  <text x="185" y="384" font-size="12.5" text-anchor="middle" fill="#d6d6ee">统一写入面 add() · 类型化 schema</text>
+
+  <line x1="185" y1="398" x2="185" y2="418" stroke="#8b8ba8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="60" y="422" width="250" height="38" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="185" y="446" font-size="12.5" text-anchor="middle" fill="#d6d6ee">验证钩子 verifier（可插拔 · 可拒收）</text>
+
+  <line x1="185" y1="460" x2="185" y2="480" stroke="#8b8ba8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="60" y="484" width="250" height="60" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="185" y="508" font-size="12.5" text-anchor="middle" fill="#f0f0f8">SQLite · records · links · FTS5 · embeddings</text>
+  <text x="185" y="528" font-size="11" text-anchor="middle" fill="#9a9ab8">Markdown 镜像 · 记忆即文件 · 可版本控制</text>
+
+  <!-- 互索引小图 -->
+  <text x="60" y="580" font-size="12" font-weight="700" letter-spacing="1.5" fill="#e6b89c">互索引 · CROSS-INDEX</text>
+  <rect x="60" y="592" width="66" height="26" rx="13" fill="#262636" stroke="#35bdbd"/>
+  <text x="93" y="609" font-size="11" text-anchor="middle" fill="#d6d6ee">STA</text>
+  <rect x="152" y="592" width="66" height="26" rx="13" fill="#262636" stroke="#8b7cf6"/>
+  <text x="185" y="609" font-size="11" text-anchor="middle" fill="#d6d6ee">DEC</text>
+  <rect x="244" y="592" width="66" height="26" rx="13" fill="#262636" stroke="#d4a5a5"/>
+  <text x="277" y="609" font-size="11" text-anchor="middle" fill="#d6d6ee">LES</text>
+  <line x1="126" y1="605" x2="150" y2="605" stroke="#8b8ba8" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <line x1="218" y1="605" x2="242" y2="605" stroke="#8b8ba8" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <text x="60" y="638" font-size="10.5" fill="#9a9ab8">part_of · caused · fixes · supersedes · refutes · derived_from …</text>
+
+  <!-- ══════════ 面板 B：读取路径 ══════════ -->
+  <rect x="360" y="112" width="330" height="448" rx="12" fill="#1b1b25" stroke="#2c2c3a"/>
+  <text x="380" y="140" font-size="12" font-weight="700" letter-spacing="1.5" fill="#35bdbd">读取路径 · READ · status-first</text>
+
+  <rect x="380" y="156" width="290" height="42" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="525" y="175" font-size="12.5" text-anchor="middle" fill="#f0f0f8">infer_project() · 作用域路由</text>
+  <text x="525" y="191" font-size="10.5" text-anchor="middle" fill="#9a9ab8">闲聊落 _global · 项目记忆不响应（防污染）</text>
+
+  <line x1="525" y1="198" x2="525" y2="218" stroke="#8b8ba8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="380" y="222" width="290" height="58" rx="8" fill="#262636" stroke="#35bdbd" stroke-opacity="0.5"/>
+  <text x="525" y="245" font-size="12.5" text-anchor="middle" fill="#f0f0f8">bootstrap() · fresh session 冷启动</text>
+  <text x="525" y="266" font-size="10.5" text-anchor="middle" fill="#9a9ab8">status 全文 → 一环指针（限量）→ 二环编号</text>
+
+  <line x1="525" y1="280" x2="525" y2="300" stroke="#8b8ba8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="380" y="304" width="138" height="42" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="449" y="322" font-size="12" text-anchor="middle" fill="#f0f0f8">jump(id)</text>
+  <text x="449" y="338" font-size="10.5" text-anchor="middle" fill="#9a9ab8">O(1) 单条精准跳转</text>
+  <rect x="532" y="304" width="138" height="42" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="601" y="322" font-size="12" text-anchor="middle" fill="#f0f0f8">neighbors(id)</text>
+  <text x="601" y="338" font-size="10.5" text-anchor="middle" fill="#9a9ab8">按需展开下一跳</text>
+  <line x1="470" y1="302" x2="470" y2="304" stroke="#8b8ba8"/>
+  <path d="M 470 300 L 470 296 L 449 296 L 449 302" fill="none" stroke="#8b8ba8" stroke-width="1.2"/>
+  <path d="M 580 300 L 580 296 L 601 296 L 601 302" fill="none" stroke="#8b8ba8" stroke-width="1.2"/>
+
+  <line x1="525" y1="346" x2="525" y2="368" stroke="#8b8ba8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="380" y="372" width="290" height="86" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="525" y="395" font-size="12.5" text-anchor="middle" fill="#f0f0f8">pack_context() · U 形曲线装箱</text>
+  <text x="525" y="415" font-size="10.5" text-anchor="middle" fill="#9a9ab8">首尾全文 · 中段只留指针 · 预算=首→尾→中段</text>
+  <!-- U 形示意 -->
+  <path d="M 420 448 L 432 428 L 444 442 L 456 432 L 468 445 L 480 430 L 492 444 L 504 434 L 516 447 L 528 431 L 540 443 L 552 433 L 564 446 L 576 429 L 588 444 L 600 428 L 612 448" fill="none" stroke="url(#accent2)" stroke-width="2.2" stroke-linecap="round"/>
+  <text x="525" y="452" font-size="9" text-anchor="middle" fill="#6f6f90">attention: primacy — middle dips — recency</text>
+
+  <text x="380" y="500" font-size="11" fill="#9a9ab8">其余记忆不进上下文 —— 按编号取回，</text>
+  <text x="380" y="518" font-size="11" fill="#9a9ab8">省 token，且目标落在注意力首尾区。</text>
+
+  <!-- ══════════ 面板 C：可插拔层 ══════════ -->
+  <rect x="720" y="112" width="280" height="448" rx="12" fill="#1b1b25" stroke="#2c2c3a"/>
+  <text x="740" y="140" font-size="12" font-weight="700" letter-spacing="1.5" fill="#e6b89c">可插拔层 · PLUGGABLE</text>
+
+  <rect x="740" y="156" width="240" height="82" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="758" y="180" font-size="12.5" font-weight="700" fill="#f0f0f8">EmbeddingProvider</text>
+  <text x="758" y="200" font-size="10.5" fill="#9a9ab8">向量语义检索 · hybrid RRF 融合</text>
+  <text x="758" y="218" font-size="10.5" fill="#9a9ab8">哈希嵌入（零依赖）/ API / sentence-transformers</text>
+  <text x="758" y="232" font-size="10.5" fill="#6f6f90">未挂载 → 词法降级并记录事件（不静默）</text>
+
+  <rect x="740" y="252" width="240" height="82" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="758" y="276" font-size="12.5" font-weight="700" fill="#f0f0f8">LLM Provider</text>
+  <text x="758" y="296" font-size="10.5" fill="#9a9ab8">睡眠蒸馏：日志 → DEC/LES 事件入库</text>
+  <text x="758" y="314" font-size="10.5" fill="#9a9ab8">OpenAI 兼容适配器 · 任意 complete() 可挂</text>
+  <text x="758" y="328" font-size="10.5" fill="#6f6f90">解析失败即报错 —— 写入路径不猜</text>
+
+  <rect x="740" y="348" width="240" height="82" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="758" y="372" font-size="12.5" font-weight="700" fill="#f0f0f8">LongMemEval-V2</text>
+  <text x="758" y="392" font-size="10.5" fill="#9a9ab8">hit@k · MRR · token 经济评测</text>
+  <text x="758" y="410" font-size="10.5" fill="#9a9ab8">load → ingest → evaluate，可复现 CLI</text>
+  <text x="758" y="424" font-size="10.5" fill="#6f6f90">近似声明：会话原文代替蒸馏产物（文档化）</text>
+
+  <rect x="740" y="444" width="240" height="100" rx="8" fill="#22222e" stroke="#3a3a52"/>
+  <text x="758" y="468" font-size="12.5" font-weight="700" fill="#f0f0f8">TaskRouter · 任务路由</text>
+  <text x="758" y="490" font-size="10.5" fill="#9a9ab8">定位（分类/实体/影响面）</text>
+  <text x="758" y="508" font-size="10.5" fill="#9a9ab8">路由（skills / MCP / 子代理）</text>
+  <text x="758" y="526" font-size="10.5" fill="#9a9ab8">契约（计划 + 宪章 + oracle + 回写）</text>
+
+  <!-- 面板间连线 -->
+  <path d="M 310 514 L 335 514 L 335 251 L 358 251" fill="none" stroke="#8b8ba8" stroke-width="1.3" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+  <text x="316" y="536" font-size="9.5" fill="#6f6f90">读自己写下的</text>
+  <path d="M 720 197 L 700 197 L 700 251 L 672 251" fill="none" stroke="#8b8ba8" stroke-width="1.2" stroke-dasharray="3 4" marker-end="url(#arrow)"/>
+  <path d="M 720 293 L 706 293 L 706 415 L 672 415" fill="none" stroke="#8b8ba8" stroke-width="1.2" stroke-dasharray="3 4" marker-end="url(#arrow)"/>
+
+  <!-- ══════════ 底栏 ══════════ -->
+  <rect x="40" y="660" width="620" height="72" rx="12" fill="#1b1b25" stroke="#2c2c3a"/>
+  <text x="60" y="686" font-size="11.5" font-weight="700" letter-spacing="1.2" fill="#8b7cf6">MCP 工具面 · 13 TOOLS</text>
+  <text x="60" y="706" font-size="10.5" fill="#b8b8cc">dls_add_record / decision / lesson / status · dls_link · dls_jump · dls_neighbors</text>
+  <text x="60" y="722" font-size="10.5" fill="#b8b8cc">dls_bootstrap · dls_search · dls_pack_context · dls_infer_project · laap_route_task · laap_sleep_distill</text>
+
+  <rect x="690" y="660" width="310" height="72" rx="12" fill="#1b1b25" stroke="#2c2c3a"/>
+  <text x="710" y="686" font-size="11.5" font-weight="700" letter-spacing="1.2" fill="#d4a5a5">设计主张 · PRINCIPLE</text>
+  <text x="710" y="708" font-size="11" fill="#b8b8cc">分析可以跨域，注意力不能跨域。</text>
+  <text x="710" y="724" font-size="10" fill="#6f6f90">Analysis may cross domains; attention must not.</text>
+</svg>

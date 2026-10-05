@@ -31,6 +31,8 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Callable, Iterable, Literal
 
+from .embeddings import cosine
+
 __all__ = [
     "RecordType",
     "LinkRelation",
@@ -113,12 +115,14 @@ class DLSMemory:
     """Decisions / Lessons / Status 三库互索引记忆引擎。"""
 
     def __init__(self, home: str | Path | None = None,
-                 verifier: Callable[[str], dict] | None = None):
+                 verifier: Callable[[str], dict] | None = None,
+                 embedder: Callable | None = None):
         self.home = Path(home) if home else default_home()
         self.home.mkdir(parents=True, exist_ok=True)
         self.md_root = self.home / "md"
         self.md_root.mkdir(parents=True, exist_ok=True)
         self._verifier = verifier
+        self._embedder = embedder  # 语义检索挂载点（EmbeddingProvider 协议）
         self._fts_ok = True
         self._degrade_events: list[str] = []
         self._db = sqlite3.connect(str(self.home / "dls.db"), check_same_thread=False)
@@ -164,6 +168,7 @@ class DLSMemory:
             )
             self._index_text(record)
         self._write_markdown(record)
+        self._index_embedding(record)
         return record
 
     def add_decision(self, title: str, context: str, chosen: str, rationale: str,
@@ -368,6 +373,25 @@ class DLSMemory:
             f"工作日志：\n{day_notes}"
         )
 
+    def distill_day(self, day_notes: str, project: str = "_global",
+                    provider: Callable | None = None,
+                    link_to: str | None = None) -> list[DLSRecord]:
+        """睡眠蒸馏的 LLM 路径：日志文本 → LLM 提炼事件 → DEC/LES 入库。
+
+        provider 只需实现 ``complete(prompt) -> str``（见 mnemos_ark.llm，
+        内置 OpenAI 兼容适配器）。provider 为 None 时显式报错——蒸馏是
+        写入路径，不猜。解析失败同样报错（parse_event_array 不容错入库）。
+        """
+        if provider is None:
+            raise DLSError("distill_day 需要 LLM provider（mnemos_ark.llm.OpenAICompatProvider）")
+        from .llm import parse_event_array
+        raw = provider.complete(self.build_distill_prompt(day_notes))
+        try:
+            events = parse_event_array(raw)
+        except RuntimeError as exc:
+            raise DLSError(f"蒸馏输出解析失败: {exc}") from exc
+        return self.distill_events(events, project=project, link_to=link_to)
+
     def current_status(self, project: str = "_global") -> DLSRecord | None:
         row = self._db.execute(
             "SELECT * FROM records WHERE type='status' AND project=? "
@@ -410,7 +434,81 @@ class DLSMemory:
             [like, like, like, *params, limit]).fetchall()
         return [self._row_to_record(r) for r in rows]
 
-    # ------------------------------------------------- 冷启动与 U 形曲线装箱
+    # --------------------------------------- 语义检索（可插拔向量层）
+
+    @property
+    def embedder(self):
+        return self._embedder
+
+    def _index_embedding(self, record: DLSRecord) -> None:
+        if self._embedder is None:
+            return
+        vec = self._embedder.embed([f"{record.title}\n{record.body}"])[0]
+        blob = json.dumps([round(float(x), 6) for x in vec]).encode("utf-8")
+        with self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO embeddings (id, dim, vector) VALUES (?,?,?)",
+                (record.id, len(vec), blob))
+
+    def rebuild_embeddings(self) -> int:
+        """挂载/更换 embedder 后全量重建向量索引，返回重建条数。"""
+        if self._embedder is None:
+            raise DLSError("未挂载 embedder：语义检索需要先传入 EmbeddingProvider")
+        rows = self._db.execute("SELECT id, title, body FROM records").fetchall()
+        with self._db:
+            for row in rows:
+                vec = self._embedder.embed(
+                    [f"{row['title']}\n{row['body']}"])[0]
+                blob = json.dumps([round(float(x), 6) for x in vec]).encode("utf-8")
+                self._db.execute(
+                    "INSERT OR REPLACE INTO embeddings (id, dim, vector) VALUES (?,?,?)",
+                    (row["id"], len(vec), blob))
+        return len(rows)
+
+    def semantic_search(self, query: str, top_k: int = 10,
+                        type: RecordType | None = None,
+                        project: str | None = None) -> list[DLSRecord]:
+        """向量语义检索（余弦）。未挂 embedder 时显式报错，不静默降级。"""
+        if self._embedder is None:
+            raise DLSError("未挂载 embedder：语义检索需要先传入 EmbeddingProvider")
+        qvec = self._embedder.embed([query])[0]
+        rows = self._db.execute(
+            "SELECT e.id, e.vector, r.* FROM embeddings e "
+            "JOIN records r ON r.id = e.id").fetchall()
+        scored = []
+        for row in rows:
+            if type and row["type"] != type:
+                continue
+            if project and row["project"] != project:
+                continue
+            vec = json.loads(row["vector"])
+            score = cosine(qvec, vec) if len(vec) == len(qvec) else 0.0
+            scored.append((score, row["updated_at"], row))
+        scored.sort(key=lambda s: (s[0], s[1]), reverse=True)
+        return [self._row_to_record(s[2]) for s in scored[:top_k]]
+
+    def hybrid_search(self, query: str, top_k: int = 10,
+                      type: RecordType | None = None,
+                      project: str | None = None) -> list[DLSRecord]:
+        """词法 + 语义混合检索（RRF 融合）。无 embedder 时降级词法并记录事件。"""
+        lexical = self.search(query, type=type, project=project, limit=top_k * 3)
+        if self._embedder is None:
+            self._degrade_events.append("hybrid_search 无 embedder，降级词法")
+            return lexical[:top_k]
+        semantic = self.semantic_search(query, top_k=top_k * 3,
+                                        type=type, project=project)
+        fused: dict[str, float] = {}
+        records: dict[str, DLSRecord] = {}
+        for rank, rec in enumerate(lexical):
+            fused[rec.id] = fused.get(rec.id, 0.0) + 1.0 / (60 + rank + 1)
+            records[rec.id] = rec
+        for rank, rec in enumerate(semantic):
+            fused[rec.id] = fused.get(rec.id, 0.0) + 1.0 / (60 + rank + 1)
+            records[rec.id] = rec
+        ordered = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)
+        return [records[rid] for rid, _ in ordered[:top_k]]
+
+    # --------------------------------------- U 形曲线装箱
 
     def bootstrap(self, project: str = "_global",
                   budget_tokens: int = 1200,
@@ -636,6 +734,10 @@ class DLSMemory:
                 n INTEGER NOT NULL
             );
             """
+        )
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS embeddings ("
+            "id TEXT PRIMARY KEY, dim INTEGER NOT NULL, vector BLOB NOT NULL)"
         )
         try:
             self._db.execute(
