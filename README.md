@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-61%20passed-brightgreen.svg)](#tests)
+[![Tests](https://img.shields.io/badge/tests-71%20passed-brightgreen.svg)](#tests)
 
 给 AI Agent 的**结构化长期记忆 + 精准任务路由**引擎。三类记忆（决策史 / 错题本 / 工程现状）互索引，fresh session 从 status 出发，其余按编号精准跳转——**不整库灌上下文，省 token，更精准**。零重型依赖（Python stdlib only）。
 
@@ -213,6 +213,35 @@ python scripts/run_longhorizon.py --tasks 50 --noise 2
 
 status-first 仅占 **13.7%**，检索命中 100%（合成任务，真实数据以自跑轨迹为准）。
 
+## v0.3 · 向量后端与团队记忆域
+
+### sqlite-vec 向量后端（万条级）
+
+向量索引双后端自动切换：sqlite-vec 可用时走 **vec0 KNN**，缺席时降级
+blob 全表余弦（合法状态，非错误）；`vector_backend` 报告当前能力，
+维度变更自动重建索引并记录事件。
+
+```python
+mem = DLSMemory(embedder=HashingEmbedder(dim=256))
+mem.vector_backend   # 'sqlite-vec'（装了 sqlite-vec）或 'blob'
+```
+
+### 跨 Agent 治理共享（团队记忆域）
+
+把 DEC/LES/STA 打包成可迁移的记忆包，经治理门导出、经完整性校验导入：
+
+```python
+from mnemos_ark.sharing import SharePolicy, export_pack, import_pack, verify_pack
+
+pack = export_pack(mem, "team")            # 治理门：溯源可验证才出门
+import_pack(other_agent_memory, pack)      # 验哈希 → 裁决 → 去重 → 边重映射
+verify_pack(pack)                          # 篡改即拒收
+```
+
+治理三铁律：**分享前必须溯源可验证**（drill_down 不通过的记录不许出门）·
+**导入必验完整性**（哈希不符即拒收）· **策略裁决字段**（allow_types /
+min_confidence / redact_keys）。每次流动写 `share_log` 审计留痕。
+
 ## MCP 工具面
 
 13 个工具可直接注册进任意 FastMCP 服务器：
@@ -221,6 +250,7 @@ status-first 仅占 **13.7%**，检索命中 100%（合成任务，真实数据�
 dls_add_record / dls_add_decision / dls_add_lesson / dls_add_status
 dls_link / dls_jump / dls_neighbors / dls_bootstrap
 dls_search / dls_pack_context / dls_infer_project / dls_drill_down
+dls_export_pack / dls_import_pack
 laap_route_task / laap_sleep_distill
 ```
 
@@ -251,10 +281,11 @@ register_task_router_tools(mcp)  # 2 tools
 
 ```bash
 pip install -e ".[dev]"
-pytest            # 61 tests: 写入契约 / 互索引 / 冷启动 / U 形装箱 /
+pytest            # 71 tests: 写入契约 / 互索引 / 冷启动 / U 形装箱 /
                   # 作用域防污染 / 蒸馏 / 注册面 / 路由契约 /
                   # 向量层 / LLM 适配器 / LongMemEval 基准 /
-                  # 符号画布 / 下钻不变量 / 场景蒸馏 / 长时程
+                  # 符号画布 / 下钻不变量 / 场景蒸馏 / 长时程 /
+                  # sqlite-vec 后端 / 治理共享
 ```
 
 ## 设计文档
@@ -272,8 +303,8 @@ pytest            # 61 tests: 写入契约 / 互索引 / 冷启动 / U 形装箱
 - [x] 睡眠蒸馏的 LLM provider 适配器（OpenAI 兼容 + 任意 callable）
 - [x] LongMemEval-V2 基准接入（hit@k / MRR / token 经济）
 - [x] v0.2：符号画布（任务内压缩）+ 下钻不变量 + 场景蒸馏层 + 长时程基准
-- [ ] sqlite-vec 向量后端（万条级）
-- [ ] 跨 Agent 治理共享（团队记忆域）
+- [x] sqlite-vec 向量后端（万条级，KNN + blob 兑底自动切换）
+- [x] 跨 Agent 治理共享（团队记忆域：治理门 + 防篡改 + 审计）
 - [ ] 浏览器/桌面端 Computer Use 联动（进行中）
 
 ## License
@@ -292,4 +323,4 @@ Mnemos Ark（记忆方舟）是 LAAP 数字生命项目的记忆底座开源版�
 - fresh session 从 `STA`（工程现状，短）出发，沿互索引按需展开，其余记忆按编号 `jump` 精准取回；
 - 决策史记录"当时为什么这么选、什么条件下重新考虑"，错题本记录"错在哪、口诀是什么"——这两样恰恰是主流 Agent 记忆系统缺失的结构。
 
-由 [Lorry Jovens](https://github.com/lorryjovens-hub) 与 Aris（LAAP 数字生命）共同设计与实现。测试 61 项全绿。
+由 [Lorry Jovens](https://github.com/lorryjovens-hub) 与 Aris（LAAP 数字生命）共同设计与实现。测试 71 项全绿。

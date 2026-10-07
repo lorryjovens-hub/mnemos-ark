@@ -142,7 +142,7 @@ class TestDistill:
 class TestRegistration:
     def test_register_dls_tools_count(self):
         fake = FakeMCP()
-        assert mcp.register_dls_tools(fake) == 12
+        assert mcp.register_dls_tools(fake) == 14
         assert "dls_bootstrap" in fake.tools and "dls_jump" in fake.tools
 
     def test_register_task_router_tools_count(self):

@@ -31,6 +31,11 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Callable, Iterable, Literal
 
+try:
+    import sqlite_vec as _sqlite_vec  # 可选加速：vec0 KNN（万条级）
+except Exception:  # 缺席是合法状态，blob 余弦是完整兑底
+    _sqlite_vec = None
+
 from .embeddings import cosine
 
 __all__ = [
@@ -124,6 +129,8 @@ class DLSMemory:
         self.md_root.mkdir(parents=True, exist_ok=True)
         self._verifier = verifier
         self._embedder = embedder  # 语义检索挂载点（EmbeddingProvider 协议）
+        self._vec_ok = _sqlite_vec is not None  # sqlite-vec 加速后端可用性
+        self._vec_dim: int | None = None
         self._fts_ok = True
         self._degrade_events: list[str] = []
         self._db = sqlite3.connect(str(self.home / "dls.db"), check_same_thread=False)
@@ -582,6 +589,48 @@ class DLSMemory:
     def embedder(self):
         return self._embedder
 
+    @property
+    def vector_backend(self) -> str:
+        """当前向量后端能力：``sqlite-vec``（KNN 加速）或 ``blob``（全表余弦兑底）。
+
+        报告的是可用能力而非激活态——vec0 表在首次写入嵌入时建。"""
+        return "sqlite-vec" if self._vec_ok else "blob"
+
+    def _ensure_vec_table(self, dim: int) -> bool:
+        if not self._vec_ok:
+            return False
+        if self._vec_dim == dim:
+            return True
+        try:
+            self._db.enable_load_extension(True)
+            _sqlite_vec.load(self._db)
+            if self._vec_dim is not None:
+                self._db.execute("DROP TABLE IF EXISTS embeddings_vec")
+                self._degrade_events.append(
+                    f"向量维度变更 {self._vec_dim}->{dim}，vec0 索引已重建")
+            self._db.execute(
+                f"CREATE VIRTUAL TABLE IF NOT EXISTS embeddings_vec "
+                f"USING vec0(embedding float[{dim}])")
+            self._vec_dim = dim
+            return True
+        except Exception as exc:
+            self._vec_ok = False
+            self._degrade_events.append(
+                f"sqlite-vec 不可用，向量检索降级 blob 余弦: {exc}")
+            return False
+
+    def _vec_upsert(self, record_id: str, vec: list[float]) -> None:
+        row = self._db.execute(
+            "SELECT rowid FROM embeddings WHERE id=?", (record_id,)).fetchone()
+        if row is None or not self._ensure_vec_table(len(vec)):
+            return
+        with self._db:
+            self._db.execute(
+                "DELETE FROM embeddings_vec WHERE rowid=?", (row["rowid"],))
+            self._db.execute(
+                "INSERT INTO embeddings_vec(rowid, embedding) VALUES (?,?)",
+                (row["rowid"], _sqlite_vec.serialize_float32(vec)))
+
     def _index_embedding(self, record: DLSRecord) -> None:
         if self._embedder is None:
             return
@@ -591,6 +640,7 @@ class DLSMemory:
             self._db.execute(
                 "INSERT OR REPLACE INTO embeddings (id, dim, vector) VALUES (?,?,?)",
                 (record.id, len(vec), blob))
+        self._vec_upsert(record.id, vec)
 
     def rebuild_embeddings(self) -> int:
         """挂载/更换 embedder 后全量重建向量索引，返回重建条数。"""
@@ -598,22 +648,55 @@ class DLSMemory:
             raise DLSError("未挂载 embedder：语义检索需要先传入 EmbeddingProvider")
         rows = self._db.execute("SELECT id, title, body FROM records").fetchall()
         with self._db:
+            self._db.execute("DELETE FROM embeddings")
             for row in rows:
                 vec = self._embedder.embed(
                     [f"{row['title']}\n{row['body']}"])[0]
                 blob = json.dumps([round(float(x), 6) for x in vec]).encode("utf-8")
                 self._db.execute(
-                    "INSERT OR REPLACE INTO embeddings (id, dim, vector) VALUES (?,?,?)",
+                    "INSERT INTO embeddings (id, dim, vector) VALUES (?,?,?)",
                     (row["id"], len(vec), blob))
+        self._db.execute("DROP TABLE IF EXISTS embeddings_vec")
+        self._vec_dim = None
+        for row in rows:
+            vec = self._embedder.embed([f"{row['title']}\n{row['body']}"])[0]
+            self._vec_upsert(row["id"], vec)
         return len(rows)
 
     def semantic_search(self, query: str, top_k: int = 10,
                         type: RecordType | None = None,
                         project: str | None = None) -> list[DLSRecord]:
-        """向量语义检索（余弦）。未挂 embedder 时显式报错，不静默降级。"""
+        """向量语义检索。sqlite-vec 可用时走 KNN，否则 blob 全表余弦。
+        未挂 embedder 时显式报错，不静默降级。"""
         if self._embedder is None:
             raise DLSError("未挂载 embedder：语义检索需要先传入 EmbeddingProvider")
         qvec = self._embedder.embed([query])[0]
+
+        if self._vec_ok and self._vec_dim == len(qvec):
+            try:
+                knn = self._db.execute(
+                    "SELECT rowid, distance FROM embeddings_vec "
+                    "WHERE embedding MATCH ? AND k = ?",
+                    (_sqlite_vec.serialize_float32(qvec), top_k * 4)).fetchall()
+                scored = []
+                for hit in knn:
+                    row = self._db.execute(
+                        "SELECT * FROM records WHERE id=("
+                        "SELECT id FROM embeddings WHERE rowid=?)",
+                        (hit["rowid"],)).fetchone()
+                    if row is None:
+                        continue
+                    if type and row["type"] != type:
+                        continue
+                    if project and row["project"] != project:
+                        continue
+                    scored.append((-float(hit["distance"]), row["updated_at"], row))
+                scored.sort(key=lambda s: (s[0], s[1]), reverse=True)
+                return [self._row_to_record(s[2]) for s in scored[:top_k]]
+            except sqlite3.OperationalError as exc:
+                self._degrade_events.append(
+                    f"vec0 KNN 查询失败，降级 blob 余弦: {exc}")
+
         rows = self._db.execute(
             "SELECT e.id, e.vector, r.* FROM embeddings e "
             "JOIN records r ON r.id = e.id").fetchall()

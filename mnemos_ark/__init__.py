@@ -9,7 +9,7 @@ from .router import TaskRouter, TaskRoute
 from .canvas import TaskCanvas, CanvasNode, CanvasError
 from .longrun import LongRunTask, synthesize_long_run, run_long_horizon
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "DLSMemory",

@@ -163,6 +163,31 @@ def dls_drill_down(rec_id: str, home: str = "") -> str:
         return _err(exc)
 
 
+def dls_export_pack(project: str, require_chain_ok: bool = True,
+                    home: str = "") -> str:
+    """导出团队记忆包（治理门：溯源可验证才出门，被拒附理由）。"""
+    try:
+        from .sharing import SharePolicy, export_pack
+        pack = export_pack(_engine(home or None), project,
+                           SharePolicy(require_chain_ok=require_chain_ok))
+        return json.dumps(pack, ensure_ascii=False)
+    except (DLSError, ValueError) as exc:
+        return _err(exc)
+
+
+def dls_import_pack(pack_json: str, target_project: str = "",
+                    home: str = "") -> str:
+    """导入团队记忆包（验哈希 → 策略裁决 → 去重 → 重新编号 → 边重映射）。"""
+    try:
+        from .sharing import import_pack
+        pack = json.loads(pack_json)
+        result = import_pack(_engine(home or None), pack,
+                             target_project=target_project or None)
+        return json.dumps(result, ensure_ascii=False)
+    except (DLSError, ValueError) as exc:
+        return _err(exc)
+
+
 def register_dls_tools(mcp_server: Any) -> int:
     """向 FastMCP 注册 DLS 记忆工具，返回注册数量。
 
@@ -258,7 +283,19 @@ def register_dls_tools(mcp_server: Any) -> int:
         """下钻不变量验证：沿 sources 溯源链走到原文（记录 id / refs/ 文件契约）。"""
         return _run(_IMPL["drill_down"], rec_id=rec_id)
 
-    return 12
+    @mcp_server.tool()
+    async def dls_export_pack(project: str, require_chain_ok: bool = True) -> str:
+        """导出团队记忆包（治理铁律：溯源可验证才出门，被拒附理由）。"""
+        return _run(_IMPL["export_pack"], project=project,
+                    require_chain_ok=require_chain_ok)
+
+    @mcp_server.tool()
+    async def dls_import_pack(pack_json: str, target_project: str = "") -> str:
+        """导入团队记忆包（验哈希防篡改 → 策略裁决 → 去重 → 边重映射）。"""
+        return _run(_IMPL["import_pack"], pack_json=pack_json,
+                    target_project=target_project)
+
+    return 14
 
 
 def _run(fn: Any, **kw: Any) -> str:
@@ -285,4 +322,6 @@ _IMPL: dict[str, Any] = {
     "pack_context": dls_pack_context,
     "infer_project": dls_infer_project,
     "drill_down": dls_drill_down,
+    "export_pack": dls_export_pack,
+    "import_pack": dls_import_pack,
 }
