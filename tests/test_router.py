@@ -118,9 +118,10 @@ class TestDistill:
         sta = dls.add_status("现状", "s", project="p")
         events = [
             {"kind": "decision", "title": "选了方案 A", "context": "c",
-             "chosen": "A", "rationale": "r", "options_considered": ["A", "B"]},
+             "chosen": "A", "rationale": "r", "options_considered": ["A", "B"],
+             "source": "N-0001"},
             {"kind": "lesson", "title": "踩了坑 X", "mistake": "m",
-             "correction": "c", "rule_of_thumb": "口诀"},
+             "correction": "c", "rule_of_thumb": "口诀", "source": "N-0002"},
             {"kind": "gossip", "title": "闲聊不入库"},
         ]
         created = dls.distill_events(events, project="p", link_to=sta.id)
@@ -141,7 +142,7 @@ class TestDistill:
 class TestRegistration:
     def test_register_dls_tools_count(self):
         fake = FakeMCP()
-        assert mcp.register_dls_tools(fake) == 11
+        assert mcp.register_dls_tools(fake) == 12
         assert "dls_bootstrap" in fake.tools and "dls_jump" in fake.tools
 
     def test_register_task_router_tools_count(self):

@@ -74,6 +74,7 @@ class DLSRecord:
     confidence: float = 1.0
     tags: list = field(default_factory=list)
     provenance: str = ""
+    sources: list = field(default_factory=list)
     created_at: float = 0.0
     updated_at: float = 0.0
 
@@ -135,8 +136,13 @@ class DLSMemory:
             project: str = "_global", domain: str = "general",
             payload: dict | None = None, confidence: float = 1.0,
             tags: Iterable[str] = (), provenance: str = "",
+            sources: Iterable[str] = (),
             verify: bool = True) -> DLSRecord:
-        """统一写入面。所有记忆都从这里进，自动过验证钩子 + Markdown 镜像。"""
+        """统一写入面。所有记忆都从这里进，自动过验证钩子 + Markdown 镜像。
+
+        ``sources`` 是下钻不变量的锚点：溯源链（记录 id / 画布 node_id /
+        任意外部引用 id），``drill_down`` 沿链验证到原文。
+        """
         if type not in _PREFIX:
             raise DLSError(f"非法记忆类型: {type!r}")
         if not title.strip():
@@ -154,17 +160,19 @@ class DLSMemory:
             id=rec_id, type=type, project=project, domain=domain,
             title=title.strip(), body=body, payload=payload or {},
             confidence=float(confidence), tags=sorted(set(tags)),
-            provenance=provenance, created_at=now, updated_at=now,
+            provenance=provenance, sources=sorted(set(sources)),
+            created_at=now, updated_at=now,
         )
         with self._db:
             self._db.execute(
                 "INSERT INTO records (id, type, project, domain, title, body,"
-                " payload, status, confidence, tags, provenance,"
-                " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " payload, status, confidence, tags, provenance, sources,"
+                " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (record.id, record.type, record.project, record.domain,
                  record.title, record.body, json.dumps(record.payload, ensure_ascii=False),
                  record.status, record.confidence, json.dumps(record.tags, ensure_ascii=False),
-                 record.provenance, record.created_at, record.updated_at),
+                 record.provenance, json.dumps(record.sources, ensure_ascii=False),
+                 record.created_at, record.updated_at),
             )
             self._index_text(record)
         self._write_markdown(record)
@@ -193,8 +201,12 @@ class DLSMemory:
 
     def add_status(self, title: str, summary: str, current_state: dict | None = None,
                    next_steps: Iterable[str] = (), open_questions: Iterable[str] = (),
-                   supersede_previous: bool = True, **kw) -> DLSRecord:
-        """工程现状快照。默认取代同项目上一份 status（旧的转 superseded）。"""
+                   supersede_previous: bool = True,
+                   extra: dict | None = None, **kw) -> DLSRecord:
+        """工程现状快照。默认取代同项目上一份 status（旧的转 superseded）。
+
+        ``extra`` 合并进 payload（如场景蒸馏层的 scenarios 块）。
+        """
         payload = {
             "summary": summary,
             "current_state": current_state or {},
@@ -202,6 +214,8 @@ class DLSMemory:
             "open_questions": list(open_questions),
             "last_verified": _now(),
         }
+        if extra:
+            payload.update(extra)
         rec = self.add("status", title, body=summary, payload=payload, **kw)
         if supersede_previous:
             with self._db:
@@ -280,6 +294,27 @@ class DLSMemory:
                          "title": peer.title if peer else "?", "note": edge.note})
         return {"out": out, "in": into}
 
+    def list_records(self, project: str | None = None,
+                     type: RecordType | None = None,
+                     limit: int | None = None) -> list[DLSRecord]:
+        """按过滤条件列出记录（基准与审计用；不检索不打分）。"""
+        sql = "SELECT * FROM records"
+        conds, params = [], []
+        if project:
+            conds.append("project=?")
+            params.append(project)
+        if type:
+            conds.append("type=?")
+            params.append(type)
+        if conds:
+            sql += " WHERE " + " AND ".join(conds)
+        sql += " ORDER BY updated_at"
+        if limit:
+            sql += " LIMIT ?"
+            params.append(limit)
+        return [self._row_to_record(r) for r in
+                self._db.execute(sql, params).fetchall()]
+
     def infer_project(self, query: str, default: str = "_global") -> str:
         """作用域路由（P2）：从查询推断激活的项目域，闲聊落 `_global`。
 
@@ -317,38 +352,55 @@ class DLSMemory:
     # ------------------------------------------------------- 睡眠蒸馏（P3）
 
     def distill_events(self, events: Iterable[dict], project: str = "_global",
-                       link_to: str | None = None) -> list[DLSRecord]:
+                       link_to: str | None = None,
+                       require_sources: bool = True) -> list[DLSRecord]:
         """零 LLM 蒸馏：把结构化事件流编译成 DEC/LES 并入库。
 
         事件 schema（调用方如 structured_failure / error_reflection 产）：
-          {kind: "decision"|"lesson", title, ...}
+          {kind: "decision"|"lesson", title, source: "溯源 id", ...}
           decision: context/chosen/rationale/options_considered
           lesson:   mistake/correction/trigger/severity
-        未知 kind 不静默丢弃，跳过并由调用方统计。
+
+        **下钻不变量**（v0.2）：require_sources=True 时每个事件必须携带
+        source（画布 node_id / 记录 id / 外部引用 id）。两阶段先验后写：
+        任一违规整批拒收——蒸馏是写入路径，不猜、不半写。
+        未知 kind 与空标题跳过（非违规，不入库）。
         """
-        created: list[DLSRecord] = []
+        items: list[tuple[dict, str, str, list[str]]] = []
+        violations: list[str] = []
         for event in events:
             kind = event.get("kind")
             title = str(event.get("title", "")).strip()
-            if not title:
+            if not title or kind not in ("decision", "lesson"):
                 continue
+            raw = event.get("source") or event.get("sources") or []
+            srcs = [raw] if isinstance(raw, str) else list(raw)
+            srcs = [s for s in (str(x).strip() for x in srcs) if s]
+            if require_sources and not srcs:
+                violations.append(title)
+            items.append((event, kind, title, srcs))
+        if violations:
+            raise DLSError(
+                f"下钻不变量违规：{len(violations)} 条事件缺少 source"
+                f"（{'；'.join(violations[:3])}）—— 整批拒收")
+
+        created: list[DLSRecord] = []
+        for event, kind, title, srcs in items:
             if kind == "decision":
                 rec = self.add_decision(
                     title=title, context=event.get("context", ""),
                     chosen=event.get("chosen", ""),
                     rationale=event.get("rationale", ""),
                     options_considered=event.get("options_considered", []),
-                    project=project, provenance="sleep-distill")
-            elif kind == "lesson":
+                    project=project, provenance="sleep-distill", sources=srcs)
+            else:
                 rec = self.add_lesson(
                     title=title, mistake=event.get("mistake", ""),
                     correction=event.get("correction", ""),
                     trigger=event.get("trigger", ""),
                     severity=event.get("severity", "medium"),
                     rule_of_thumb=event.get("rule_of_thumb", ""),
-                    project=project, provenance="sleep-distill")
-            else:
-                continue
+                    project=project, provenance="sleep-distill", sources=srcs)
             if link_to:
                 self.link(link_to, rec.id, "derived_from")
             created.append(rec)
@@ -369,28 +421,111 @@ class DLSMemory:
             '或 {"kind":"lesson","title":"...","mistake":"...",'
             '"correction":"...","trigger":"...","severity":"high|medium|low",'
             '"rule_of_thumb":"一句话口诀"}\n'
-            "只收录有长期价值的决策与教训，闲聊与流水账丢弃。\n\n"
+            "只收录有长期价值的决策与教训，闲聊与流水账丢弃。\n"
+            "每条必须带 source 字段（引用日志中的来源标记或原文片段 id），"
+            "没有来源的条目不要输出。\n\n"
             f"工作日志：\n{day_notes}"
         )
 
+    def drill_down(self, rec_id: str, max_depth: int = 5) -> dict:
+        """下钻不变量验证：沿 sources 链走到原文，报告每一跳是否可解析。
+
+        source 两类：记录 id（本库 records，递归下钻）与画布/外部 id
+        （如 N-0001，按 ``refs/{id}.md`` 文件契约解析）。自身即原文
+        （无 sources）视为可解析——不变量约束的是“抽象必须可溯源”，
+        不是“每条记录都必须有上游”。
+        """
+        visited: set[str] = set()
+        chain: list[dict] = []
+        broken: list[str] = []
+
+        def walk(node_id: str, depth: int) -> None:
+            if node_id in visited or depth > max_depth:
+                return
+            visited.add(node_id)
+            rec = self.get(node_id)
+            if rec is not None:
+                chain.append({"id": node_id, "kind": rec.type,
+                              "resolved": True, "title": rec.title})
+                for src in rec.sources:
+                    walk(src, depth + 1)
+            else:
+                path = self.home / "refs" / f"{node_id}.md"
+                resolved = path.exists()
+                chain.append({"id": node_id, "kind": "ref",
+                              "resolved": resolved, "title": node_id})
+                if not resolved:
+                    broken.append(node_id)
+
+        walk(rec_id, 0)
+        return {"record_id": rec_id, "chain": chain, "broken": broken,
+                "chain_ok": not broken and bool(chain)}
+
     def distill_day(self, day_notes: str, project: str = "_global",
                     provider: Callable | None = None,
-                    link_to: str | None = None) -> list[DLSRecord]:
+                    link_to: str | None = None,
+                    scenarios: bool = False) -> list[DLSRecord]:
         """睡眠蒸馏的 LLM 路径：日志文本 → LLM 提炼事件 → DEC/LES 入库。
 
         provider 只需实现 ``complete(prompt) -> str``（见 mnemos_ark.llm，
         内置 OpenAI 兼容适配器）。provider 为 None 时显式报错——蒸馏是
         写入路径，不猜。解析失败同样报错（parse_event_array 不容错入库）。
+
+        ``scenarios=True`` 启用场景蒸馏层（金字塔 L2，吸收自 TencentDB
+        Agent Memory 的分层思想）：第二遍 LLM 把事件归纳为场景块，
+        聚合成一条 status（payload.scenarios）并与其成员事件互索引
+        （成员 --part_of--> status）。返回列表尾部即该 status。
         """
         if provider is None:
             raise DLSError("distill_day 需要 LLM provider（mnemos_ark.llm.OpenAICompatProvider）")
-        from .llm import parse_event_array
+        from .llm import build_scenario_prompt, parse_event_array
         raw = provider.complete(self.build_distill_prompt(day_notes))
         try:
             events = parse_event_array(raw)
         except RuntimeError as exc:
             raise DLSError(f"蒸馏输出解析失败: {exc}") from exc
-        return self.distill_events(events, project=project, link_to=link_to)
+        created = self.distill_events(events, project=project, link_to=link_to)
+        if not scenarios or not created:
+            return created
+
+        raw_scen = provider.complete(build_scenario_prompt(
+            json.dumps(events, ensure_ascii=False)))
+        try:
+            scen_list = parse_event_array(raw_scen)
+        except RuntimeError as exc:
+            raise DLSError(f"场景蒸馏输出解析失败: {exc}") from exc
+        blocks = []
+        member_ids: set[str] = set()
+        for scen in scen_list:
+            if not isinstance(scen, dict) or not str(scen.get("title", "")).strip():
+                continue
+            members = []
+            for m in scen.get("members", []):
+                try:
+                    rec = created[int(m)]
+                except (ValueError, IndexError, TypeError):
+                    continue
+                members.append(rec.id)
+                member_ids.add(rec.id)
+            blocks.append({
+                "title": str(scen["title"]).strip(),
+                "situation": scen.get("situation", ""),
+                "pattern": scen.get("pattern", ""),
+                "response": scen.get("response", ""),
+                "members": members,
+            })
+        if not blocks:
+            return created
+        sta = self.add_status(
+            title=f"场景蒸馏 {time.strftime('%Y-%m-%d', time.localtime())}",
+            summary=f"{len(blocks)} 个场景块（金字塔 L2）",
+            project=project, provenance="sleep-distill-scenario",
+            sources=sorted(member_ids),
+            extra={"scenarios": blocks}, supersede_previous=False)
+        for rid in member_ids:
+            self.link(rid, sta.id, "part_of")
+        created.append(sta)
+        return created
 
     def current_status(self, project: str = "_global") -> DLSRecord | None:
         row = self._db.execute(
@@ -427,12 +562,19 @@ class DLSMemory:
             except sqlite3.OperationalError as exc:
                 self._fts_ok = False
                 self._degrade_events.append(f"FTS5 不可用，降级 LIKE: {exc}")
-        like = f"%{query}%"
+        like_terms = self._query_terms(query) or [query]
         rows = self._db.execute(
-            "SELECT * FROM records WHERE (title LIKE ? OR body LIKE ? OR tags LIKE ?)" +
-            filter_sql + " ORDER BY updated_at DESC LIMIT ?",
-            [like, like, like, *params, limit]).fetchall()
-        return [self._row_to_record(r) for r in rows]
+            "SELECT * FROM records" + filter_sql.replace(" AND ", " WHERE ", 1)
+            if filter_sql else "SELECT * FROM records",
+            params).fetchall()
+        scored = []
+        for row in rows:
+            haystack = (row["title"] + " " + row["body"] + " " + row["tags"]).lower()
+            score = sum(1 for t in like_terms if t in haystack)
+            if score:
+                scored.append((score, row["updated_at"], row))
+        scored.sort(key=lambda s: (s[0], s[1]), reverse=True)
+        return [self._row_to_record(s[2]) for s in scored[:limit]]
 
     # --------------------------------------- 语义检索（可插拔向量层）
 
@@ -677,7 +819,7 @@ class DLSMemory:
             "id": record.id, "type": record.type, "project": record.project,
             "domain": record.domain, "status": record.status,
             "confidence": record.confidence, "tags": record.tags,
-            "provenance": record.provenance,
+            "provenance": record.provenance, "sources": record.sources,
             "created_at": record.created_at, "updated_at": record.updated_at,
             "payload": record.payload,
         }
@@ -693,6 +835,7 @@ class DLSMemory:
             payload=json.loads(row["payload"]), status=row["status"],
             confidence=row["confidence"], tags=json.loads(row["tags"]),
             provenance=row["provenance"], created_at=row["created_at"],
+            sources=json.loads(row["sources"]) if "sources" in row.keys() else [],
             updated_at=row["updated_at"],
         )
 
@@ -716,6 +859,7 @@ class DLSMemory:
                 confidence REAL NOT NULL DEFAULT 1.0,
                 tags TEXT NOT NULL DEFAULT '[]',
                 provenance TEXT NOT NULL DEFAULT '',
+                sources TEXT NOT NULL DEFAULT '[]',
                 created_at REAL NOT NULL,
                 updated_at REAL NOT NULL
             );
@@ -735,6 +879,11 @@ class DLSMemory:
             );
             """
         )
+        cols = {r["name"] for r in self._db.execute(
+            "PRAGMA table_info(records)").fetchall()}
+        if "sources" not in cols:
+            self._db.execute(
+                "ALTER TABLE records ADD COLUMN sources TEXT NOT NULL DEFAULT '[]'")
         self._db.execute(
             "CREATE TABLE IF NOT EXISTS embeddings ("
             "id TEXT PRIMARY KEY, dim INTEGER NOT NULL, vector BLOB NOT NULL)"

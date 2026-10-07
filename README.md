@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-46%20passed-brightgreen.svg)](#tests)
+[![Tests](https://img.shields.io/badge/tests-61%20passed-brightgreen.svg)](#tests)
 
 给 AI Agent 的**结构化长期记忆 + 精准任务路由**引擎。三类记忆（决策史 / 错题本 / 工程现状）互索引，fresh session 从 status 出发，其余按编号精准跳转——**不整库灌上下文，省 token，更精准**。零重型依赖（Python stdlib only）。
 
@@ -162,6 +162,57 @@ python scripts/run_longmemeval.py --dataset longmemeval.jsonl --strategy hybrid 
 数据集标注，缺失时用答案子串启发式；本基准只评记忆管线命中与 token 经济，
 不评 LLM 答题准确率。
 
+## v0.2 · 任务内压缩与溯源契约
+
+三项升级（架构演进向 [TencentDB Agent Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory) 的分层思想致意）：
+
+### 符号画布（任务内 token 压缩）
+
+```python
+from mnemos_ark.canvas import TaskCanvas
+
+cv = TaskCanvas()
+node = cv.offload("步骤1 抓取数据", heavy_tool_output)   # 原文落 refs/N-0001.md
+cv.link(node.node_id, next_node.node_id)
+
+cv.pack()        # 顶层注入：Mermaid 符号图 + 节点指针（几百 token）
+cv.recall("N-0001")   # 按 node_id O(1) 取回原文
+```
+
+实测压缩率：20 个重日志节点下 `compression_ratio < 0.05`——符号换 token，寻址保追溯。
+
+### 下钻不变量（溯源契约）
+
+**每条抽象必须携带可验证的溯源链。** 写入面 `sources=[...]`（记录 id /
+画布 node_id / 外部引用 id），蒸馏事件缺 source **整批拒收**（两阶段先验后写，
+零半写）；`drill_down(id)` 沿链走到原文并报告每一跳可解析性：
+
+```python
+rec = dls.add_lesson("蒸馏教训", mistake="…", correction="…", sources=["N-0001"])
+dls.drill_down(rec.id)   # → chain: [LES-0001, N-0001(ref, resolved=True)]
+```
+
+### 场景蒸馏层（金字塔 L2）
+
+`distill_day(..., scenarios=True)` 两遍蒸馏：事件 → 场景块（处境/模式/对策），
+聚合进 status（`payload.scenarios`）并与成员事件互索引——比事件更聚合、
+比人格更具体的中间表示。
+
+### 长时程基准（连续任务压力协议）
+
+```bash
+python scripts/run_longhorizon.py --tasks 50 --noise 2
+```
+
+50 连任务实测（口径借鉴 TDAM 的 SWE-bench 长时程协议）：
+
+| 策略 | 累计 token | 末任务上下文 | 峰值上下文 |
+|---|---|---|---|
+| full-history | 78,154 | 3,070 | 3,070（线性膨胀） |
+| status-first | 10,714 | 218 | 238（恒定） |
+
+status-first 仅占 **13.7%**，检索命中 100%（合成任务，真实数据以自跑轨迹为准）。
+
 ## MCP 工具面
 
 13 个工具可直接注册进任意 FastMCP 服务器：
@@ -169,7 +220,7 @@ python scripts/run_longmemeval.py --dataset longmemeval.jsonl --strategy hybrid 
 ```
 dls_add_record / dls_add_decision / dls_add_lesson / dls_add_status
 dls_link / dls_jump / dls_neighbors / dls_bootstrap
-dls_search / dls_pack_context / dls_infer_project
+dls_search / dls_pack_context / dls_infer_project / dls_drill_down
 laap_route_task / laap_sleep_distill
 ```
 
@@ -200,9 +251,10 @@ register_task_router_tools(mcp)  # 2 tools
 
 ```bash
 pip install -e ".[dev]"
-pytest            # 46 tests: 写入契约 / 互索引 / 冷启动 / U 形装箱 /
+pytest            # 61 tests: 写入契约 / 互索引 / 冷启动 / U 形装箱 /
                   # 作用域防污染 / 蒸馏 / 注册面 / 路由契约 /
-                  # 向量层 / LLM 适配器 / LongMemEval 基准
+                  # 向量层 / LLM 适配器 / LongMemEval 基准 /
+                  # 符号画布 / 下钻不变量 / 场景蒸馏 / 长时程
 ```
 
 ## 设计文档
@@ -219,6 +271,9 @@ pytest            # 46 tests: 写入契约 / 互索引 / 冷启动 / U 形装箱
 - [x] 语义检索挂载点（EmbeddingProvider 可插拔向量层 + hybrid RRF）
 - [x] 睡眠蒸馏的 LLM provider 适配器（OpenAI 兼容 + 任意 callable）
 - [x] LongMemEval-V2 基准接入（hit@k / MRR / token 经济）
+- [x] v0.2：符号画布（任务内压缩）+ 下钻不变量 + 场景蒸馏层 + 长时程基准
+- [ ] sqlite-vec 向量后端（万条级）
+- [ ] 跨 Agent 治理共享（团队记忆域）
 - [ ] 浏览器/桌面端 Computer Use 联动（进行中）
 
 ## License
@@ -237,4 +292,4 @@ Mnemos Ark（记忆方舟）是 LAAP 数字生命项目的记忆底座开源版�
 - fresh session 从 `STA`（工程现状，短）出发，沿互索引按需展开，其余记忆按编号 `jump` 精准取回；
 - 决策史记录"当时为什么这么选、什么条件下重新考虑"，错题本记录"错在哪、口诀是什么"——这两样恰恰是主流 Agent 记忆系统缺失的结构。
 
-由 [Lorry Jovens](https://github.com/lorryjovens-hub) 与 Aris（LAAP 数字生命）共同设计与实现。测试 46 项全绿。
+由 [Lorry Jovens](https://github.com/lorryjovens-hub) 与 Aris（LAAP 数字生命）共同设计与实现。测试 61 项全绿。

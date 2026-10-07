@@ -23,6 +23,7 @@ __all__ = [
     "CallableProvider",
     "OpenAICompatProvider",
     "parse_event_array",
+    "build_scenario_prompt",
 ]
 
 
@@ -71,6 +72,25 @@ class OpenAICompatProvider:
 
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
+
+
+def build_scenario_prompt(events_json: str) -> str:
+    """场景蒸馏层（金字塔 L2）的提示：事件 → 场景块。
+
+    场景块是「处境—模式—对策」的中间表示，比事件更聚合、比人格更具体；
+    产出会被聚合进 status（payload.scenarios）并与其成员事件互索引。
+    同样只输出 JSON 数组，解析失败即报错。
+    """
+    return (
+        "从以下记忆事件中归纳场景块（scenario）。只输出 JSON 数组，不要其它文本。\n"
+        "每项形如：\n"
+        '{"title":"场景名","situation":"什么处境下",'
+        '"pattern":"反复出现的模式","response":"有效的应对",'
+        '"members":[0,2]}\n'
+        "members 是所引用事件在输入数组中的下标。只归纳有复用价值的场景，"
+        "孤例不要归纳。\n\n"
+        f"记忆事件：\n{events_json}"
+    )
 
 
 def parse_event_array(text: str) -> list:

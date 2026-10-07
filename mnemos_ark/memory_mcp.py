@@ -154,6 +154,15 @@ def dls_infer_project(query: str, home: str = "") -> str:
         return _err(exc)
 
 
+def dls_drill_down(rec_id: str, home: str = "") -> str:
+    """下钻不变量验证：沿 sources 溯源链走到原文，报告每一跳可解析性。"""
+    try:
+        return json.dumps(_engine(home or None).drill_down(rec_id),
+                          ensure_ascii=False)
+    except DLSError as exc:
+        return _err(exc)
+
+
 def register_dls_tools(mcp_server: Any) -> int:
     """向 FastMCP 注册 DLS 记忆工具，返回注册数量。
 
@@ -244,7 +253,12 @@ def register_dls_tools(mcp_server: Any) -> int:
         """作用域路由（P2）：从查询推断激活项目域，闲聊落 _global。"""
         return _run(_IMPL["infer_project"], query=query)
 
-    return 11
+    @mcp_server.tool()
+    async def dls_drill_down(rec_id: str) -> str:
+        """下钻不变量验证：沿 sources 溯源链走到原文（记录 id / refs/ 文件契约）。"""
+        return _run(_IMPL["drill_down"], rec_id=rec_id)
+
+    return 12
 
 
 def _run(fn: Any, **kw: Any) -> str:
@@ -270,4 +284,5 @@ _IMPL: dict[str, Any] = {
     "search": dls_search,
     "pack_context": dls_pack_context,
     "infer_project": dls_infer_project,
+    "drill_down": dls_drill_down,
 }

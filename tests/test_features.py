@@ -93,9 +93,11 @@ class TestLLMAdapter:
         dls = DLSMemory(home=tmp_path / "dls")
         payload = json.dumps([
             {"kind": "decision", "title": "走单写入面", "context": "四套打架",
-             "chosen": "vault_bridge", "rationale": "统一作用域标签"},
+             "chosen": "vault_bridge", "rationale": "统一作用域标签",
+             "source": "N-0001"},
             {"kind": "lesson", "title": "FTS5 中文陷阱", "mistake": "整句成单 token",
-             "correction": "CJK 走 LIKE", "rule_of_thumb": "中文不进 FTS"},
+             "correction": "CJK 走 LIKE", "rule_of_thumb": "中文不进 FTS",
+             "source": "N-0002"},
         ], ensure_ascii=False)
         provider = CallableProvider(lambda prompt: f"```json\n{payload}\n```")
         created = dls.distill_day("今天收敛了写入面，还修了 FTS5", project="p",
